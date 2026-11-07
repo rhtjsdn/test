@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-# 전체 화면을 넓게 사용
+# 와이드 화면 레이아웃
 st.set_page_config(page_title="그리드샷 에임 트레이너", layout="wide")
 
 gridshot_html = """
@@ -9,9 +9,7 @@ gridshot_html = """
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Dongle:wght@700&family=Gowun+Dodum&display=swap" rel="stylesheet">
+<!-- 폭죽 효과 라이브러리 -->
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
 <style>
@@ -24,7 +22,8 @@ gridshot_html = """
     padding: 0;
     background-color: #ffffff;
     color: #111111;
-    font-family: 'Gowun Dodum', sans-serif;
+    /* 몽글몽글하고 둥근 폰트 스타일 (시스템 폰트 폴백 적용) */
+    font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Nanum Gothic", sans-serif;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -40,18 +39,18 @@ gridshot_html = """
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 80vh;
+    height: 75vh;
   }
 
   .bubble-btn {
-    font-family: 'Dongle', sans-serif;
-    font-size: 42px;
+    font-size: 34px;
+    font-weight: 800;
     line-height: 1;
     background-color: #ffffff;
     color: #111111;
-    border: 3px solid #111111;
+    border: 3.5px solid #111111;
     border-radius: 40px;
-    padding: 12px 48px;
+    padding: 16px 52px;
     cursor: pointer;
     box-shadow: 0 4px 15px rgba(0,0,0,0.08);
     transition: all 0.2s ease-in-out;
@@ -65,31 +64,36 @@ gridshot_html = """
     transform: translateY(1px);
   }
 
-  /* 2. 환영 화면 */
+  /* 2. 환영 화면 (흰색 박스 및 테두리 완전히 제거) */
   #welcome-screen {
     display: none;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 80vh;
-    animation: fadeIn 0.6s ease-out forwards;
+    height: 75vh;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    background: transparent !important;
+    animation: fadeIn 0.4s ease-out forwards;
   }
 
   .welcome-title {
-    font-family: 'Dongle', sans-serif;
-    font-size: 84px;
-    font-weight: 700;
+    font-size: 68px;
+    font-weight: 900;
     color: #111111;
     margin: 0;
-    line-height: 1;
+    line-height: 1.2;
+    letter-spacing: -1px;
   }
   .welcome-sub {
-    font-size: 24px;
-    color: #555555;
-    margin-top: 10px;
+    font-size: 22px;
+    font-weight: 600;
+    color: #666666;
+    margin-top: 15px;
   }
 
-  /* 3. 게임 화면 (대형 와이드) */
+  /* 3. 게임 화면 */
   #game-screen {
     display: none;
     flex-direction: column;
@@ -103,7 +107,7 @@ gridshot_html = """
     display: flex;
     gap: 50px;
     font-size: 26px;
-    font-weight: bold;
+    font-weight: 800;
     margin-bottom: 12px;
     color: #111111;
   }
@@ -115,7 +119,7 @@ gridshot_html = """
     justify-content: center;
   }
 
-  /* 캔버스 테두리를 화면 가득 넓힘 */
+  /* 훈련장 테두리 */
   canvas {
     width: 100%;
     max-width: 1280px;
@@ -145,13 +149,14 @@ gridshot_html = """
   }
 
   .result-title {
-    font-family: 'Dongle', sans-serif;
-    font-size: 72px;
+    font-size: 64px;
+    font-weight: 900;
     margin: 0;
-    line-height: 1;
+    line-height: 1.2;
   }
   .result-desc {
     font-size: 24px;
+    font-weight: 700;
     color: #333333;
     margin: 12px 0 28px 0;
   }
@@ -164,18 +169,18 @@ gridshot_html = """
 </head>
 <body>
 
-  <!-- 시작 화면 -->
+  <!-- 1. 시작 화면 -->
   <div id="intro-screen">
     <button class="bubble-btn" onclick="handleEnter()">들어가기</button>
   </div>
 
-  <!-- 환영 화면 -->
+  <!-- 2. 환영 화면 (텍스트만 깔끔하게 노출) -->
   <div id="welcome-screen">
     <div class="welcome-title">환영합니다!</div>
     <div class="welcome-sub">잠시 후 그리드샷 훈련이 시작됩니다...</div>
   </div>
 
-  <!-- 게임 화면 (와이드 1280 x 680) -->
+  <!-- 3. 게임 화면 -->
   <div id="game-screen">
     <div class="scoreboard">
       <div>남은 시간: <span id="timer">30</span>초</div>
@@ -204,7 +209,7 @@ gridshot_html = """
   const ctx = canvas.getContext("2d");
 
   const TARGET_COUNT = 3;
-  const RADIUS = 28; // 화면이 넓어진 만큼 타겟을 너무 크지 않게 세팅
+  const RADIUS = 28;
   let targets = [];
   let score = 0;
   let totalClicks = 0;
@@ -217,12 +222,14 @@ gridshot_html = """
     introScreen.style.display = "none";
     welcomeScreen.style.display = "flex";
 
+    // 자연스러운 폭죽 효과
     confetti({
       particleCount: 90,
       spread: 80,
       origin: { y: 0.6 }
     });
 
+    // 2초 뒤 바로 그리드샷 진입
     setTimeout(() => {
       welcomeScreen.style.display = "none";
       gameScreen.style.display = "flex";
@@ -230,10 +237,9 @@ gridshot_html = """
     }, 2000);
   }
 
-  // 타겟 생성: 테두리 끝부분까지 넓게 흩어지도록 패딩을 최소화하고 타겟 간격을 넓힘
   function generatePosition() {
-    const padX = RADIUS + 15; // 좌우 끝단 여백 최소화
-    const padY = RADIUS + 15; // 상하 끝단 여백 최소화
+    const padX = RADIUS + 15;
+    const padY = RADIUS + 15;
     let x, y, overlap;
     let attempts = 0;
 
@@ -242,7 +248,6 @@ gridshot_html = """
       x = Math.random() * (canvas.width - padX * 2) + padX;
       y = Math.random() * (canvas.height - padY * 2) + padY;
 
-      // 타겟들이 뭉치지 않고 넓게 벌어지도록 최소 거리(3.5배) 확보
       for (let t of targets) {
         if (Math.hypot(x - t.x, y - t.y) < RADIUS * 3.5) {
           overlap = true;
@@ -318,7 +323,6 @@ gridshot_html = """
     startGame();
   }
 
-  // 브라우저 리사이징 시에도 실제 캔버스 내부 좌표에 정확히 클릭되도록 보정
   canvas.addEventListener("mousedown", (e) => {
     if (!isPlaying) return;
 
@@ -370,5 +374,4 @@ gridshot_html = """
 </html>
 """
 
-# 와이드 화면에 맞춰 컴포넌트 프레임 높이를 820px로 확장
 components.html(gridshot_html, height=820)
