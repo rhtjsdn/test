@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-# 화면을 넓게 쓰기 위해 layout="wide"로 설정
+# 전체 화면을 넓게 사용
 st.set_page_config(page_title="그리드샷 에임 트레이너", layout="wide")
 
 gridshot_html = """
@@ -21,15 +21,16 @@ gridshot_html = """
   }
   body {
     margin: 0;
-    padding: 10px 0;
+    padding: 0;
     background-color: #ffffff;
     color: #111111;
     font-family: 'Gowun Dodum', sans-serif;
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    min-height: 720px;
+    justify-content: flex-start;
+    width: 100vw;
+    height: 100vh;
     overflow: hidden;
   }
 
@@ -39,18 +40,18 @@ gridshot_html = """
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 600px;
+    height: 80vh;
   }
 
   .bubble-btn {
     font-family: 'Dongle', sans-serif;
-    font-size: 38px;
+    font-size: 42px;
     line-height: 1;
     background-color: #ffffff;
     color: #111111;
     border: 3px solid #111111;
     border-radius: 40px;
-    padding: 10px 42px;
+    padding: 12px 48px;
     cursor: pointer;
     box-shadow: 0 4px 15px rgba(0,0,0,0.08);
     transition: all 0.2s ease-in-out;
@@ -70,64 +71,72 @@ gridshot_html = """
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    height: 600px;
+    height: 80vh;
     animation: fadeIn 0.6s ease-out forwards;
   }
 
   .welcome-title {
     font-family: 'Dongle', sans-serif;
-    font-size: 76px;
+    font-size: 84px;
     font-weight: 700;
     color: #111111;
     margin: 0;
     line-height: 1;
   }
   .welcome-sub {
-    font-size: 20px;
+    font-size: 24px;
     color: #555555;
     margin-top: 10px;
   }
 
-  /* 3. 게임 화면 */
+  /* 3. 게임 화면 (대형 와이드) */
   #game-screen {
     display: none;
     flex-direction: column;
     align-items: center;
-    width: 100%;
+    width: 98%;
+    max-width: 1300px;
+    margin: 10px auto;
   }
 
   .scoreboard {
     display: flex;
-    gap: 40px;
-    font-size: 24px;
+    gap: 50px;
+    font-size: 26px;
     font-weight: bold;
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     color: #111111;
   }
 
   .canvas-wrapper {
     position: relative;
-    display: inline-block;
+    width: 100%;
+    display: flex;
+    justify-content: center;
   }
 
+  /* 캔버스 테두리를 화면 가득 넓힘 */
   canvas {
-    border: 3px solid #111111;
-    border-radius: 24px;
+    width: 100%;
+    max-width: 1280px;
+    height: 680px;
+    border: 3.5px solid #111111;
+    border-radius: 20px;
     background-color: #ffffff;
     cursor: crosshair;
-    box-shadow: 0 10px 35px rgba(0,0,0,0.07);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.06);
     display: block;
   }
 
-  /* 결과 및 재시작 오버레이 */
+  /* 결과 및 재시작 레이어 */
   #result-overlay {
     display: none;
     position: absolute;
     top: 0;
     left: 0;
-    width: 800px;
-    height: 520px;
-    border-radius: 24px;
+    width: 100%;
+    height: 100%;
+    border-radius: 20px;
     background-color: rgba(255, 255, 255, 0.94);
     flex-direction: column;
     align-items: center;
@@ -137,18 +146,18 @@ gridshot_html = """
 
   .result-title {
     font-family: 'Dongle', sans-serif;
-    font-size: 64px;
+    font-size: 72px;
     margin: 0;
     line-height: 1;
   }
   .result-desc {
-    font-size: 22px;
+    font-size: 24px;
     color: #333333;
-    margin: 12px 0 24px 0;
+    margin: 12px 0 28px 0;
   }
 
   @keyframes fadeIn {
-    from { opacity: 0; transform: scale(0.95); }
+    from { opacity: 0; transform: scale(0.96); }
     to { opacity: 1; transform: scale(1); }
   }
 </style>
@@ -166,7 +175,7 @@ gridshot_html = """
     <div class="welcome-sub">잠시 후 그리드샷 훈련이 시작됩니다...</div>
   </div>
 
-  <!-- 게임 화면 (크기: 800 x 520) -->
+  <!-- 게임 화면 (와이드 1280 x 680) -->
   <div id="game-screen">
     <div class="scoreboard">
       <div>남은 시간: <span id="timer">30</span>초</div>
@@ -175,9 +184,8 @@ gridshot_html = """
     </div>
     
     <div class="canvas-wrapper">
-      <canvas id="gridCanvas" width="800" height="520"></canvas>
+      <canvas id="gridCanvas" width="1280" height="680"></canvas>
 
-      <!-- 게임 종료 시 표시되는 재시작 레이어 -->
       <div id="result-overlay">
         <div class="result-title">훈련 종료!</div>
         <div class="result-desc" id="final-stats">점수: 0 | 정확도: 0%</div>
@@ -196,7 +204,7 @@ gridshot_html = """
   const ctx = canvas.getContext("2d");
 
   const TARGET_COUNT = 3;
-  const RADIUS = 30; // 화면 크기 확장에 맞춰 타겟도 살짝 키움 (28 -> 30)
+  const RADIUS = 28; // 화면이 넓어진 만큼 타겟을 너무 크지 않게 세팅
   let targets = [];
   let score = 0;
   let totalClicks = 0;
@@ -211,7 +219,7 @@ gridshot_html = """
 
     confetti({
       particleCount: 90,
-      spread: 75,
+      spread: 80,
       origin: { y: 0.6 }
     });
 
@@ -222,18 +230,21 @@ gridshot_html = """
     }, 2000);
   }
 
+  // 타겟 생성: 테두리 끝부분까지 넓게 흩어지도록 패딩을 최소화하고 타겟 간격을 넓힘
   function generatePosition() {
-    const pad = RADIUS + 30;
+    const padX = RADIUS + 15; // 좌우 끝단 여백 최소화
+    const padY = RADIUS + 15; // 상하 끝단 여백 최소화
     let x, y, overlap;
     let attempts = 0;
 
     do {
       overlap = false;
-      x = Math.random() * (canvas.width - pad * 2) + pad;
-      y = Math.random() * (canvas.height - pad * 2) + pad;
+      x = Math.random() * (canvas.width - padX * 2) + padX;
+      y = Math.random() * (canvas.height - padY * 2) + padY;
 
+      // 타겟들이 뭉치지 않고 넓게 벌어지도록 최소 거리(3.5배) 확보
       for (let t of targets) {
-        if (Math.hypot(x - t.x, y - t.y) < RADIUS * 2.6) {
+        if (Math.hypot(x - t.x, y - t.y) < RADIUS * 3.5) {
           overlap = true;
           break;
         }
@@ -307,13 +318,17 @@ gridshot_html = """
     startGame();
   }
 
+  // 브라우저 리사이징 시에도 실제 캔버스 내부 좌표에 정확히 클릭되도록 보정
   canvas.addEventListener("mousedown", (e) => {
     if (!isPlaying) return;
 
     totalClicks++;
     const rect = canvas.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    const clickX = (e.clientX - rect.left) * scaleX;
+    const clickY = (e.clientY - rect.top) * scaleY;
 
     let hitIndex = -1;
     for (let i = 0; i < targets.length; i++) {
@@ -355,5 +370,5 @@ gridshot_html = """
 </html>
 """
 
-# 가로/세로 확장에 맞춰 높이를 750px로 넉넉하게 지정
-components.html(gridshot_html, height=750)
+# 와이드 화면에 맞춰 컴포넌트 프레임 높이를 820px로 확장
+components.html(gridshot_html, height=820)
