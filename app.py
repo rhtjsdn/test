@@ -3,16 +3,15 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="그리드샷 에임 트레이너", layout="wide")
 
-# Streamlit 자체 iframe 테두리 및 여백 완전 제거
+# Streamlit 기본 여백 및 iframe 초기화
 st.markdown("""
 <style>
     iframe {
         border: none !important;
         outline: none !important;
     }
-    .block-container {
-        padding-top: 1rem;
-        padding-bottom: 0rem;
+    .main .block-container {
+        padding: 1.5rem 1rem 0rem 1rem !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -31,7 +30,7 @@ gridshot_html = """
     padding: 0;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
-    outline: none !important; /* 모든 포커스 테두리 강제 제거 */
+    outline: none !important;
   }
 
   body {
@@ -44,13 +43,22 @@ gridshot_html = """
     justify-content: flex-start;
     width: 100vw;
     height: 100vh;
+    padding-top: 25px; /* 상단이 짤리지 않도록 여백 확보 */
     overflow: hidden;
+  }
+
+  /* 폭죽 라이브러리가 자동 생성하는 캔버스의 배경 및 테두리 완전 투명화 */
+  canvas:not(#mainCanvas) {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    outline: none !important;
   }
 
   /* 상단 점수판 */
   #header-bar {
     width: 1280px;
-    height: 48px;
+    height: 50px;
     display: flex;
     justify-content: center;
     align-items: center;
@@ -58,28 +66,29 @@ gridshot_html = """
     font-size: 26px;
     font-weight: 800;
     color: #111111;
-    visibility: hidden; /* 게임 중에만 표시 */
-    margin-bottom: 8px;
+    visibility: hidden;
+    margin-bottom: 12px;
   }
 
-  /* 메인 캔버스 영역 */
+  /* 훈련장 컨테이너 */
   .stage-container {
     position: relative;
     width: 1280px;
-    height: 680px;
+    height: 640px;
   }
 
-  canvas {
+  /* 실제 조준 캔버스 */
+  #mainCanvas {
     display: block;
     width: 1280px;
-    height: 680px;
+    height: 640px;
     background-color: #ffffff;
     border: 3.5px solid #111111;
     border-radius: 20px;
     cursor: default;
   }
 
-  /* 중앙 시작/재시작 버튼 (몽글몽글 스타일) */
+  /* 시작/재시작 버튼 */
   .center-btn {
     position: absolute;
     top: 50%;
@@ -111,14 +120,16 @@ gridshot_html = """
 </head>
 <body>
 
+  <!-- 상단 점수판 (짤림 방지 위치 조정) -->
   <div id="header-bar">
     <div>남은 시간: <span id="timer">30</span>초</div>
     <div>점수: <span id="score">0</span></div>
     <div>정확도: <span id="accuracy">100%</span></div>
   </div>
 
+  <!-- 메인 훈련장 -->
   <div class="stage-container">
-    <canvas id="mainCanvas" width="1280" height="680"></canvas>
+    <canvas id="mainCanvas" width="1280" height="640"></canvas>
     <button id="actionBtn" class="center-btn" onclick="handleClick()">들어가기</button>
   </div>
 
@@ -128,7 +139,6 @@ gridshot_html = """
   const btn = document.getElementById("actionBtn");
   const headerBar = document.getElementById("header-bar");
 
-  // 게임 상태: 'IDLE' -> 'WELCOME' -> 'PLAYING' -> 'RESULT'
   let state = "IDLE";
 
   const TARGET_COUNT = 3;
@@ -140,28 +150,24 @@ gridshot_html = """
   let timeLeft = 30;
   let timerInterval = null;
 
-  // 진입 / 재시작 클릭 핸들러
   function handleClick() {
     btn.style.display = "none";
-
-    // 1. 환영 단계로 전환
     state = "WELCOME";
     drawWelcomeScreen();
 
-    // 폭죽 발사
+    // 폭죽 효과
     confetti({
       particleCount: 100,
       spread: 85,
       origin: { y: 0.6 }
     });
 
-    // 2초 카운트 후 칼같이 게임 화면으로 전환
     setTimeout(() => {
       startGame();
     }, 2000);
   }
 
-  // 캔버스 자체에 '환영합니다!' 텍스트 렌더링 (어떤 HTML 태그도 겹치지 않음)
+  // 캔버스 내부에 텍스트 출력
   function drawWelcomeScreen() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
@@ -177,7 +183,7 @@ gridshot_html = """
     ctx.fillText("잠시 후 그리드샷 훈련이 시작됩니다...", canvas.width / 2, canvas.height / 2 + 40);
   }
 
-  // 타겟 생성 (경계선 끝단까지 넓게 배치)
+  // 타겟 위치 분산 생성
   function generatePosition() {
     const pad = RADIUS + 15;
     let x, y, overlap;
@@ -231,7 +237,6 @@ gridshot_html = """
     }
   }
 
-  // 게임 시작
   function startGame() {
     state = "PLAYING";
     canvas.style.cursor = "crosshair";
@@ -260,7 +265,7 @@ gridshot_html = """
     }, 1000);
   }
 
-  // 타겟 클릭 판정
+  // 마우스 클릭 판정
   canvas.addEventListener("mousedown", (e) => {
     if (state !== "PLAYING") return;
 
@@ -298,14 +303,12 @@ gridshot_html = """
     document.getElementById("accuracy").innerText = `${acc}%`;
   }
 
-  // 게임 종료 및 재시작 준비
   function endGame() {
     clearInterval(timerInterval);
     state = "RESULT";
     canvas.style.cursor = "default";
     headerBar.style.visibility = "hidden";
 
-    // 결과 화면 캔버스 드로잉
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     ctx.fillStyle = "#111111";
@@ -320,7 +323,6 @@ gridshot_html = """
     ctx.fillStyle = "#333333";
     ctx.fillText(`최종 점수: ${score}점   |   정확도: ${acc}%`, canvas.width / 2, canvas.height / 2 - 35);
 
-    // 다시 시작 버튼 노출
     btn.innerText = "다시 시작하기";
     btn.style.top = "60%";
     btn.style.display = "block";
@@ -330,4 +332,5 @@ gridshot_html = """
 </html>
 """
 
-components.html(gridshot_html, height=760)
+# 상단 여백을 고려해 iframe 전체 높이를 800px로 지정
+components.html(gridshot_html, height=800)
