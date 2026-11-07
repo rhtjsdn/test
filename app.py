@@ -1,7 +1,7 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="그리드샷 에임 트레이너", layout="wide")
+st.set_page_config(page_title="에임 트레이너 (그리드샷 & 트래킹)", layout="wide")
 
 # Streamlit 기본 여백 및 iframe 초기화
 st.markdown("""
@@ -16,7 +16,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-gridshot_html = """
+aim_html = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -43,11 +43,10 @@ gridshot_html = """
     justify-content: flex-start;
     width: 100vw;
     height: 100vh;
-    padding-top: 25px; /* 상단이 짤리지 않도록 여백 확보 */
+    padding-top: 25px;
     overflow: hidden;
   }
 
-  /* 폭죽 라이브러리가 자동 생성하는 캔버스의 배경 및 테두리 완전 투명화 */
   canvas:not(#mainCanvas) {
     background: transparent !important;
     border: none !important;
@@ -70,14 +69,12 @@ gridshot_html = """
     margin-bottom: 12px;
   }
 
-  /* 훈련장 컨테이너 */
   .stage-container {
     position: relative;
     width: 1280px;
     height: 640px;
   }
 
-  /* 실제 조준 캔버스 */
   #mainCanvas {
     display: block;
     width: 1280px;
@@ -88,74 +85,127 @@ gridshot_html = """
     cursor: default;
   }
 
-  /* 시작/재시작 버튼 */
-  .center-btn {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    font-size: 34px;
+  /* 버튼 공통 스타일 */
+  .bubble-btn {
+    font-size: 30px;
     font-weight: 800;
     line-height: 1;
     background-color: #ffffff;
     color: #111111;
     border: 3.5px solid #111111;
     border-radius: 40px;
-    padding: 16px 52px;
+    padding: 16px 46px;
     cursor: pointer;
     box-shadow: 0 4px 15px rgba(0,0,0,0.08);
     transition: all 0.2s ease-in-out;
+  }
+  .bubble-btn:hover {
+    background-color: #f7f7f7;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+  }
+  .bubble-btn:active {
+    transform: translateY(1px);
+  }
+
+  /* 단일 버튼 (들어가기) */
+  #actionBtn {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 34px;
+    padding: 18px 54px;
     z-index: 10;
   }
 
-  .center-btn:hover {
-    background-color: #f7f7f7;
-    transform: translate(-50%, -52%);
-    box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+  /* 모드 선택 컨테이너 */
+  #modeSelectGroup {
+    display: none;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    gap: 30px;
+    z-index: 10;
   }
-  .center-btn:active {
-    transform: translate(-50%, -49%);
+
+  /* 결과창 재시작 버튼 그룹 */
+  #resultGroup {
+    display: none;
+    position: absolute;
+    top: 62%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    gap: 20px;
+    z-index: 10;
   }
 </style>
 </head>
 <body>
 
-  <!-- 상단 점수판 (짤림 방지 위치 조정) -->
+  <!-- 상단 점수판 -->
   <div id="header-bar">
     <div>남은 시간: <span id="timer">30</span>초</div>
     <div>점수: <span id="score">0</span></div>
     <div>정확도: <span id="accuracy">100%</span></div>
   </div>
 
-  <!-- 메인 훈련장 -->
+  <!-- 메인 훈련장 캔버스 및 제어 버튼들 -->
   <div class="stage-container">
     <canvas id="mainCanvas" width="1280" height="640"></canvas>
-    <button id="actionBtn" class="center-btn" onclick="handleClick()">들어가기</button>
+    
+    <!-- 1. 처음 들어가기 버튼 -->
+    <button id="actionBtn" class="bubble-btn" onclick="handleIntro()">들어가기</button>
+
+    <!-- 2. 모드 선택 버튼 그룹 -->
+    <div id="modeSelectGroup">
+      <button class="bubble-btn" onclick="chooseMode('gridshot')">🎯 그리드샷</button>
+      <button class="bubble-btn" onclick="chooseMode('tracking')">⚡ 트래킹</button>
+    </div>
+
+    <!-- 3. 결과 화면 버튼 그룹 -->
+    <div id="resultGroup">
+      <button class="bubble-btn" onclick="restartCurrentMode()">다시 하기</button>
+      <button class="bubble-btn" onclick="showModeSelection()">모드 변경</button>
+    </div>
   </div>
 
 <script>
   const canvas = document.getElementById("mainCanvas");
   const ctx = canvas.getContext("2d");
-  const btn = document.getElementById("actionBtn");
+  const actionBtn = document.getElementById("actionBtn");
+  const modeSelectGroup = document.getElementById("modeSelectGroup");
+  const resultGroup = document.getElementById("resultGroup");
   const headerBar = document.getElementById("header-bar");
 
-  let state = "IDLE";
+  let state = "IDLE"; // IDLE, WELCOME, SELECT_MODE, PLAYING, RESULT
+  let currentMode = "gridshot";
 
-  const TARGET_COUNT = 3;
+  // 기본 세팅
   const RADIUS = 28;
-  let targets = [];
   let score = 0;
-  let totalClicks = 0;
-  let hits = 0;
   let timeLeft = 30;
   let timerInterval = null;
+  let animFrameId = null;
 
-  function handleClick() {
-    btn.style.display = "none";
+  // 그리드샷 전용 변수
+  let targets = [];
+  let totalClicks = 0;
+  let hits = 0;
+
+  // 트래킹 전용 변수
+  let trackingTarget = { x: 0, y: 0, vx: 0, vy: 0 };
+  let mousePos = { x: -100, y: -100 };
+  let trackingTicks = 0;
+  let onTargetTicks = 0;
+
+  // 1. 들어가기 클릭
+  function handleIntro() {
+    actionBtn.style.display = "none";
     state = "WELCOME";
     drawWelcomeScreen();
 
-    // 폭죽 효과
     confetti({
       particleCount: 100,
       spread: 85,
@@ -163,14 +213,13 @@ gridshot_html = """
     });
 
     setTimeout(() => {
-      startGame();
+      showModeSelection();
     }, 2000);
   }
 
-  // 캔버스 내부에 텍스트 출력
+  // 2. 환영 화면 캔버스 렌더링
   function drawWelcomeScreen() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
     ctx.fillStyle = "#111111";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -180,30 +229,32 @@ gridshot_html = """
 
     ctx.font = "600 24px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
     ctx.fillStyle = "#666666";
-    ctx.fillText("잠시 후 그리드샷 훈련이 시작됩니다...", canvas.width / 2, canvas.height / 2 + 40);
+    ctx.fillText("훈련 모드를 준비하고 있습니다...", canvas.width / 2, canvas.height / 2 + 40);
   }
 
-  // 타겟 위치 분산 생성
-  function generatePosition() {
-    const pad = RADIUS + 15;
-    let x, y, overlap;
-    let attempts = 0;
+  // 3. 모드 선택 화면 띄우기
+  function showModeSelection() {
+    state = "SELECT_MODE";
+    resultGroup.style.display = "none";
+    headerBar.style.visibility = "hidden";
+    canvas.style.cursor = "default";
 
-    do {
-      overlap = false;
-      x = Math.random() * (canvas.width - pad * 2) + pad;
-      y = Math.random() * (canvas.height - pad * 2) + pad;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#111111";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
 
-      for (let t of targets) {
-        if (Math.hypot(x - t.x, y - t.y) < RADIUS * 3.5) {
-          overlap = true;
-          break;
-        }
-      }
-      attempts++;
-    } while (overlap && attempts < 100);
+    ctx.font = "900 54px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
+    ctx.fillText("훈련 모드를 선택하세요", canvas.width / 2, canvas.height / 2 - 120);
 
-    return { x, y };
+    modeSelectGroup.style.display = "flex";
+  }
+
+  // 4. 모드 선택 후 시작
+  function chooseMode(mode) {
+    currentMode = mode;
+    modeSelectGroup.style.display = "none";
+    startGame();
   }
 
   // 파란색 3D 구 렌더링
@@ -230,31 +281,66 @@ gridshot_html = """
     ctx.restore();
   }
 
-  function renderGame() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (let t of targets) {
-      drawSphere(t.x, t.y, RADIUS);
-    }
+  // 그리드샷 타겟 생성 (화면 끝단까지 분산)
+  function generateGridshotPosition() {
+    const pad = RADIUS + 15;
+    let x, y, overlap;
+    let attempts = 0;
+
+    do {
+      overlap = false;
+      x = Math.random() * (canvas.width - pad * 2) + pad;
+      y = Math.random() * (canvas.height - pad * 2) + pad;
+
+      for (let t of targets) {
+        if (Math.hypot(x - t.x, y - t.y) < RADIUS * 3.5) {
+          overlap = true;
+          break;
+        }
+      }
+      attempts++;
+    } while (overlap && attempts < 100);
+
+    return { x, y };
   }
 
+  // 게임 시작 로직
   function startGame() {
     state = "PLAYING";
+    resultGroup.style.display = "none";
     canvas.style.cursor = "crosshair";
     headerBar.style.visibility = "visible";
 
     score = 0;
-    totalClicks = 0;
-    hits = 0;
     timeLeft = 30;
-    targets = [];
+    updateHeader(0, 100);
 
-    for (let i = 0; i < TARGET_COUNT; i++) {
-      targets.push(generatePosition());
+    if (currentMode === "gridshot") {
+      totalClicks = 0;
+      hits = 0;
+      targets = [];
+      for (let i = 0; i < 3; i++) {
+        targets.push(generateGridshotPosition());
+      }
+      renderGridshot();
+    } else {
+      // 트래킹 모드 초기화
+      trackingTicks = 0;
+      onTargetTicks = 0;
+      const pad = RADIUS + 40;
+      trackingTarget.x = canvas.width / 2;
+      trackingTarget.y = canvas.height / 2;
+      
+      // 이동 속도 및 방향 설정 (부드러운 속도감)
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 5.0;
+      trackingTarget.vx = Math.cos(angle) * speed;
+      trackingTarget.vy = Math.sin(angle) * speed;
+
+      runTrackingLoop();
     }
 
-    updateHeader();
-    renderGame();
-
+    // 1초 타이머
     timerInterval = setInterval(() => {
       timeLeft--;
       document.getElementById("timer").innerText = timeLeft;
@@ -265,9 +351,81 @@ gridshot_html = """
     }, 1000);
   }
 
-  // 마우스 클릭 판정
-  canvas.addEventListener("mousedown", (e) => {
+  // [그리드샷] 화면 렌더링
+  function renderGridshot() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let t of targets) {
+      drawSphere(t.x, t.y, RADIUS);
+    }
+  }
+
+  // [트래킹] 60FPS 실시간 이동 및 추적 루프
+  function runTrackingLoop() {
+    if (state !== "PLAYING" || currentMode !== "tracking") return;
+
+    // 타겟 이동
+    trackingTarget.x += trackingTarget.vx;
+    trackingTarget.y += trackingTarget.vy;
+
+    // 벽 충돌 반사 (화면 테두리 안쪽 유지)
+    const pad = RADIUS + 10;
+    if (trackingTarget.x <= pad) {
+      trackingTarget.x = pad;
+      trackingTarget.vx *= -1;
+    } else if (trackingTarget.x >= canvas.width - pad) {
+      trackingTarget.x = canvas.width - pad;
+      trackingTarget.vx *= -1;
+    }
+
+    if (trackingTarget.y <= pad) {
+      trackingTarget.y = pad;
+      trackingTarget.vy *= -1;
+    } else if (trackingTarget.y >= canvas.height - pad) {
+      trackingTarget.y = canvas.height - pad;
+      trackingTarget.vy *= -1;
+    }
+
+    // 랜덤 방향 전환 (약간의 변칙성 부여)
+    if (Math.random() < 0.02) {
+      const currentSpeed = Math.hypot(trackingTarget.vx, trackingTarget.vy);
+      const newAngle = Math.random() * Math.PI * 2;
+      trackingTarget.vx = Math.cos(newAngle) * currentSpeed;
+      trackingTarget.vy = Math.sin(newAngle) * currentSpeed;
+    }
+
+    // 트래킹 판정 (마우스가 타겟 구 안에 있는지)
+    trackingTicks++;
+    const dist = Math.hypot(mousePos.x - trackingTarget.x, mousePos.y - trackingTarget.y);
+    if (dist <= RADIUS) {
+      onTargetTicks++;
+      score += 10; // 머무는 시간 비례 점수 상승
+    }
+
+    // 헤더 점수 & 정확도 갱신
+    const acc = trackingTicks > 0 ? ((onTargetTicks / trackingTicks) * 100).toFixed(1) : 100;
+    updateHeader(score, acc);
+
+    // 타겟 그리기
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawSphere(trackingTarget.x, trackingTarget.y, RADIUS);
+
+    animFrameId = requestAnimationFrame(runTrackingLoop);
+  }
+
+  // 마우스 이동 추적 (트래킹 모드용)
+  canvas.addEventListener("mousemove", (e) => {
     if (state !== "PLAYING") return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    mousePos.x = (e.clientX - rect.left) * scaleX;
+    mousePos.y = (e.clientY - rect.top) * scaleY;
+  });
+
+  // 클릭 판정 (그리드샷 전용)
+  canvas.addEventListener("mousedown", (e) => {
+    if (state !== "PLAYING" || currentMode !== "gridshot") return;
 
     totalClicks++;
     const rect = canvas.getBoundingClientRect();
@@ -290,47 +448,58 @@ gridshot_html = """
       hits++;
       score += 100;
       targets.splice(hitIndex, 1);
-      targets.push(generatePosition());
+      targets.push(generateGridshotPosition());
     }
 
-    updateHeader();
-    renderGame();
+    const acc = totalClicks > 0 ? ((hits / totalClicks) * 100).toFixed(1) : 100;
+    updateHeader(score, acc);
+    renderGridshot();
   });
 
-  function updateHeader() {
-    document.getElementById("score").innerText = score;
-    const acc = totalClicks > 0 ? ((hits / totalClicks) * 100).toFixed(1) : 100;
-    document.getElementById("accuracy").innerText = `${acc}%`;
+  function updateHeader(s, a) {
+    document.getElementById("score").innerText = s;
+    document.getElementById("accuracy").innerText = `${a}%`;
   }
 
+  // 게임 종료
   function endGame() {
     clearInterval(timerInterval);
+    if (animFrameId) cancelAnimationFrame(animFrameId);
+
     state = "RESULT";
     canvas.style.cursor = "default";
     headerBar.style.visibility = "hidden";
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
     ctx.fillStyle = "#111111";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
     ctx.font = "900 64px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
-    ctx.fillText("훈련 완료!", canvas.width / 2, canvas.height / 2 - 90);
+    const modeName = currentMode === "gridshot" ? "그리드샷" : "트래킹";
+    ctx.fillText(`${modeName} 훈련 완료!`, canvas.width / 2, canvas.height / 2 - 90);
 
-    const acc = totalClicks > 0 ? ((hits / totalClicks) * 100).toFixed(1) : 0;
+    let finalAcc = 0;
+    if (currentMode === "gridshot") {
+      finalAcc = totalClicks > 0 ? ((hits / totalClicks) * 100).toFixed(1) : 0;
+    } else {
+      finalAcc = trackingTicks > 0 ? ((onTargetTicks / trackingTicks) * 100).toFixed(1) : 0;
+    }
+
     ctx.font = "700 26px 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif";
     ctx.fillStyle = "#333333";
-    ctx.fillText(`최종 점수: ${score}점   |   정확도: ${acc}%`, canvas.width / 2, canvas.height / 2 - 35);
+    ctx.fillText(`최종 점수: ${score}점   |   정확도(추적률): ${finalAcc}%`, canvas.width / 2, canvas.height / 2 - 35);
 
-    btn.innerText = "다시 시작하기";
-    btn.style.top = "60%";
-    btn.style.display = "block";
+    resultGroup.style.display = "flex";
+  }
+
+  function restartCurrentMode() {
+    resultGroup.style.display = "none";
+    startGame();
   }
 </script>
 </body>
 </html>
 """
 
-# 상단 여백을 고려해 iframe 전체 높이를 800px로 지정
-components.html(gridshot_html, height=800)
+components.html(aim_html, height=800)
